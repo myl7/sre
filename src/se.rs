@@ -1,20 +1,26 @@
 // Copyright (C) myl7
 // SPDX-License-Identifier: Apache-2.0
 
+//! See [`SE`]
+
 use crypto_secretbox::aead::{Aead, AeadCore, KeyInit, OsRng};
 use crypto_secretbox::{Key, Nonce, XSalsa20Poly1305};
 
 /// `SE`. API of standard symmetric encryption.
 pub trait SE<const LAMBDA: usize> {
     /// `SE.Gen`. Unused.
-    // fn gen() -> [u8; LAMBDA];
+    fn gen() -> [u8; LAMBDA] {
+        unimplemented!("Unused in SRE");
+    }
     /// `SE.Enc`.
-    /// `sk` is the secret key.
-    /// `m` is the plaintext.
+    ///
+    /// - `sk` is the secret key.
+    /// - `m` is the plaintext.
     fn enc(sk: &[u8; LAMBDA], m: &[u8]) -> Vec<u8>;
     /// `SE.Dec`.
-    /// `sk` is the secret key.
-    /// `ct` is the ciphertext.
+    ///
+    /// - `sk` is the secret key.
+    /// - `ct` is the ciphertext.
     fn dec(sk: &[u8; LAMBDA], ct: &[u8]) -> Vec<u8>;
 }
 

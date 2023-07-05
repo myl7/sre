@@ -1,6 +1,8 @@
 // Copyright (C) myl7
 // SPDX-License-Identifier: Apache-2.0
 
+//! See [`BF`]
+
 use std::hash::Hasher;
 use std::marker::PhantomData;
 
@@ -8,30 +10,36 @@ use bitvec::prelude::*;
 use siphasher::sip::SipHasher;
 
 /// `BF`. API of `(b, h, n)`-Bloom filter.
-/// `n` is the maximum number of elements to be inserted.
-/// `b` is the number of Bloom filter entries.
-/// `h` is the number of hash functions.
-/// `B` is a `b`-bit array as the state.
-/// Generic parameter `BN` is the **byte** len of `B`. So `b = BN * 8`.
-/// Generic parameter `HN = h`.
-/// Generic parameter `HS` is for hash function states. Refers to `H` in the paper.
+///
+/// - `n` is the maximum number of elements to be inserted.
+/// - `b` is the number of Bloom filter entries.
+/// - `h` is the number of hash functions.
+///
+/// - `B` is a `b`-bit array as the state.
+///   Generic parameter `BN` is the **byte** len of `B`. So `b = BN * 8`.
+/// - Generic parameter `HN = h`.
+/// - Generic parameter `HS` is for hash function states. Refers to `H` in the paper.
 pub trait BF<const BN: usize, const HN: usize, HS> {
     /// `BF.Gen`.
+    ///
     /// Returns `h` hash functions and `B`.
     fn gen() -> ([HS; HN], [u8; BN]);
     /// `BF.Upd`.
-    /// `hs` is all hash functions.
-    /// `bs` is `B`. Modified in-place.
-    /// `x` is the input to be hashed.
+    ///
+    /// - `hs` is all hash functions.
+    /// - `bs` is `B`. Modified in-place.
+    /// - `x` is the input to be hashed.
     fn upd(hs: &[HS; HN], bs: &mut [u8; BN], x: &[u8]);
     /// `BF.Check`
-    /// `hs` is all hash functions.
-    /// `bs` is `B`.
-    /// `x` is the input to be hashed.
+    ///
+    /// - `hs` is all hash functions.
+    /// - `bs` is `B`.
+    /// - `x` is the input to be hashed.
     fn check(hs: &[HS; HN], bs: &[u8; BN], x: &[u8]) -> bool;
 }
 
 /// Bloom filter implementation.
+///
 /// `H` is seeded like [shangqimonash/Aura:BF/BloomFilter.h](https://github.com/shangqimonash/Aura/blob/master/BF/BloomFilter.h) .
 pub struct BFImpl<const BN: usize, const HN: usize, H>
 where
@@ -64,12 +72,13 @@ where
 }
 
 /// API of hash function for the above Bloom filter implementation.
-/// $\rightarrow [b]$.
-/// See [`BF`] for `b`.
+///
+/// `$\rightarrow [b]$`. See [`BF`] for `b`.
 pub trait BFImplH<const BN: usize> {
     /// Keyed hashing.
-    /// `x` is the input to be hashed.
-    /// `i` is the index of the hash function as the seed.
+    ///
+    /// - `x` is the input to be hashed.
+    /// - `i` is the index of the hash function as the seed.
     fn h(x: &[u8], i: usize) -> usize;
 }
 
@@ -80,6 +89,7 @@ pub struct SipH<const BN: usize> {
 
 impl<const BN: usize> BFImplH<BN> for SipH<BN> {
     /// Returns `u64` actually.
+    ///
     /// `usize` involved should be `u64`.
     fn h(x: &[u8], i: usize) -> usize {
         let mut hasher = SipHasher::new_with_keys(i as u64, 0);

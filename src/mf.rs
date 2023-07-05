@@ -1,6 +1,8 @@
 // Copyright (C) myl7
 // SPDX-License-Identifier: Apache-2.0
 
+//! See [`MF`]
+
 use std::marker::PhantomData;
 
 use hmac::{Hmac, Mac};
@@ -9,26 +11,32 @@ use sha2::Sha256;
 
 /// `MF`. API of multi-puncturable PRF.
 /// Refers to `t`-Punc-PRF with an addtional property.
-/// $t(\cdot)$ is a fixed polynomial.
-/// Generic parameter `K` is for the PRF key.
-/// Generic parameter `PK` is for the punctured key.
-/// Generic parameter `Y` is for $\mathcol{Y}$.
-/// $\mathcol{X}$ is $[N]$ where `N` is the provided generic parameter.
+/// `$t(\cdot)$` is a fixed polynomial.
+///
+/// - Generic parameter `K` is for the PRF key.
+/// - Generic parameter `PK` is for the punctured key.
+/// - Generic parameter `Y` is for `$\mathcol{Y}$`.
+/// - `$\mathcol{X}$` is `$[N]$` where `N` is the provided generic parameter.
 pub trait MF<const N: usize, K, PK, Y> {
     /// `MF.Setup`.
+    ///
     /// Returns a description (i.e., the structure or representation) of a PRF key.
     fn setup<R>(rng: &mut R) -> K
     where
         R: Rng + ?Sized;
     /// `MF.Punc`.
-    /// `k` is the PRF key.
-    /// `ss` is a set of elements `S` s.t. $|S| \le t(\lambda)$.
+    ///
+    /// - `k` is the PRF key.
+    /// - `ss` is a set of elements `S` s.t. `$|S| \le t(\lambda)$`.
+    ///
     /// Returns a punctured key.
     fn punc(k: &K, ss: &[usize]) -> PK;
     /// `MF.Eval`.
-    /// `ks` is the punctured key.
-    /// `x` is the evaluated point. $x \in [2^LOGN]$.
-    /// Returns `Y` if $x \notin S$ otherwise `None`.
+    ///
+    /// - `ks` is the punctured key.
+    /// - `x` is the evaluated point. `$x \in [2^LOGN]$`.
+    ///
+    /// Returns `Y` if `$x \notin S$` otherwise `None`.
     fn eval(ks: &PK, x: usize) -> Option<Y>;
 }
 
@@ -120,10 +128,10 @@ struct GGMNode4MinCov {
 }
 
 pub struct GGMNode<const LAMBDA: usize> {
-    /// $i \in [N]$
+    /// `$i \in [N]$`
     pub i: usize,
     pub key: [u8; LAMBDA],
-    /// $level \in [\left \lceil{\log{N}}\right \rceil]$
+    /// `$level \in [\left \lceil{\log{N}}\right \rceil]$`
     pub level: u32,
 }
 

@@ -1,6 +1,8 @@
 // Copyright (C) myl7
 // SPDX-License-Identifier: Apache-2.0
 
+//! See [`SRE`]
+
 pub mod bf;
 pub mod mf;
 pub mod se;
@@ -15,6 +17,7 @@ use crate::mf::{GGMKeyDerive, GGMPRFKey, GGMPuncKey, GGMPuncPRF, MF};
 use crate::se::SE;
 
 /// `SRE`. API of symmetric revocable encryption.
+///
 /// See [`bf::BF`] for `BN` and `HN`.
 pub trait SRE<const LAMBDA: usize, const HN: usize, MSK, SKR> {
     /// `SRE.KGen`
@@ -30,6 +33,7 @@ pub trait SRE<const LAMBDA: usize, const HN: usize, MSK, SKR> {
 }
 
 /// Symmetric revocable encryption implementation.
+///
 /// To avoid #![feature(generic_const_exprs)], it is your responsibility to ensure `N = BN * 8`.
 pub struct SREImpl<
     const LAMBDA: usize,
@@ -56,7 +60,7 @@ pub struct MSKImpl<const LAMBDA: usize, const BN: usize, const HN: usize> {
     pub bs: [u8; BN],
 }
 
-/// $sk_R$
+/// `$sk_R$`
 pub struct SKRImpl<const LAMBDA: usize, const BN: usize, const HN: usize, HS> {
     pub ski: GGMPuncKey<LAMBDA>,
     pub hs: [HS; HN],
