@@ -88,12 +88,7 @@ where
                 let punc_key = GGMPuncPRF::<LAMBDA, N, KD>::punc(&msk.sk, &[]);
                 GGMPuncPRF::<LAMBDA, N, KD>::eval(&punc_key, i).unwrap()
             })
-            .map(|sk| {
-                // TODO: SE ouputs Vec
-                let mut m_buf = m.to_vec();
-                SEImpl::enc(&sk, &mut m_buf);
-                m_buf
-            })
+            .map(|sk| SEImpl::enc(&sk, m))
             .collect::<Vec<_>>()
             .try_into()
             .unwrap()
@@ -122,13 +117,8 @@ where
         if !BFImpl::<BN, HN, H>::check(&skr.hs, &skr.bs, t) {
             return None;
         }
-        match skr.bs.view_bits::<Lsb0>().first_zero() {
-            Some(i) => GGMPuncPRF::<LAMBDA, N, KD>::eval(&skr.ski, i).map(|sk| {
-                let mut m_buf = ct[0].to_vec();
-                SEImpl::dec(&sk, &mut m_buf);
-                m_buf
-            }),
-            None => None,
-        }
+        skr.bs.view_bits::<Lsb0>().first_zero().and_then(|i| {
+            GGMPuncPRF::<LAMBDA, N, KD>::eval(&skr.ski, i).map(|sk| SEImpl::dec(&sk, &ct[i]))
+        })
     }
 }
