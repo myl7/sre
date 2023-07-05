@@ -1,6 +1,12 @@
 // Copyright (C) myl7
 // SPDX-License-Identifier: Apache-2.0
 
+use std::hash::Hasher;
+use std::marker::PhantomData;
+
+use bitvec::prelude::*;
+use siphasher::sip::SipHasher;
+
 /// `BF`. API of `(b, h, n)`-Bloom filter.
 /// `n` is the maximum number of elements to be inserted.
 /// `b` is the number of Bloom filter entries.
@@ -8,25 +14,111 @@
 /// `B` is a `b`-bit array as the state.
 /// Generic parameter `BN` is the **byte** len of `B`. So `b = BN * 8`.
 /// Generic parameter `HN = h`.
-pub trait BF<const LAMBDA: usize, const BN: usize, const HN: usize, HImpl>
-where
-    HImpl: H<LAMBDA>,
-{
+/// Generic parameter `HS` is for hash function states. Refers to `H` in the paper.
+pub trait BF<const BN: usize, const HN: usize, HS> {
     /// `BF.Gen`.
     /// Returns `h` hash functions and `B`.
-    fn gen() -> ([HImpl; HN], [u8; BN]);
+    fn gen() -> ([HS; HN], [u8; BN]);
     /// `BF.Upd`.
-    /// `h_func` is a hash function.
-    /// `b_state` is `B`. Modified in-place.
+    /// `hs` is all hash functions.
+    /// `bs` is `B`. Modified in-place.
     /// `x` is the input to be hashed.
-    fn upd(h_func: &HImpl, b_state: &mut [u8; BN], x: &[u8; LAMBDA]);
+    fn upd(hs: &[HS; HN], bs: &mut [u8; BN], x: &[u8]);
     /// `BF.Check`
-    /// `h_func` is a hash function.
-    /// `b_state` is `B`.
-    fn check(h_func: &HImpl, b_state: &[u8; BN], x: &[u8; LAMBDA]) -> bool;
+    /// `hs` is all hash functions.
+    /// `bs` is `B`.
+    /// `x` is the input to be hashed.
+    fn check(hs: &[HS; HN], bs: &[u8; BN], x: &[u8]) -> bool;
 }
 
-/// `H`. API of hash function.
+/// Bloom filter implementation.
+/// `H` is seeded as https://github.com/shangqimonash/Aura/blob/master/BF/BloomFilter.h .
+pub struct BFImpl<const BN: usize, const HN: usize, H>
+where
+    H: BFImplH,
+{
+    _phantom: PhantomData<H>,
+}
+
+impl<const BN: usize, const HN: usize, H> BF<BN, HN, usize> for BFImpl<BN, HN, H>
+where
+    H: BFImplH,
+{
+    fn gen() -> ([usize; HN], [u8; BN]) {
+        (std::array::from_fn(|i| i), [0; BN])
+    }
+
+    fn upd(hs: &[usize; HN], bs: &mut [u8; BN], x: &[u8]) {
+        hs.iter().for_each(|&i| {
+            let index = H::h(x, i) % BN;
+            bs.view_bits_mut::<Lsb0>().set(index, true);
+        })
+    }
+
+    fn check(hs: &[usize; HN], bs: &[u8; BN], x: &[u8]) -> bool {
+        hs.iter().all(|&i| {
+            let index = H::h(x, i) % BN;
+            bs.view_bits::<Lsb0>()[index]
+        })
+    }
+}
+
+/// API of hash function for the above Bloom filter implementation.
 /// $\rightarrow [b]$.
 /// See [`BF`] for `b`.
-pub trait H<const LAMBDA: usize> {}
+pub trait BFImplH {
+    /// Keyed hashing.
+    /// `x` is the input to be hashed.
+    /// `i` is the index of the hash function as the seed.
+    fn h(x: &[u8], i: usize) -> usize;
+}
+
+/// SipHash 2-4 as hash function implementation
+pub struct SipH {
+    pub i: u64,
+}
+
+impl BFImplH for SipH {
+    /// Returns `u64` actually.
+    /// `usize` involved should be `u64`.
+    fn h(x: &[u8], i: usize) -> usize {
+        let mut hasher = SipHasher::new_with_keys(i as u64, 0);
+        hasher.write(&x);
+        hasher.finish() as usize
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const BN: usize = 8192;
+    const HN: usize = 3;
+
+    const XS: &[&[u8]] = &[
+        b".S\x1c\x8f\xb1\x17\x92@\xd8e\xe0\xf0\xafe\x15x",
+        b"\x80\xed\xba\x08\xa2<[\x82\xf2[w\xac\xa8\x14\xdb\xa9",
+        b"\x15Z\x8a\x88L\xd4\x87\x91\xb9m)@\xcb\x94\x07\xcc",
+    ];
+
+    #[test]
+    fn test_siph_upd_then_check_ok() {
+        let (hs, mut bs) = BFImpl::<BN, HN, SipH>::gen();
+        XS.iter().for_each(|&x| {
+            BFImpl::<BN, HN, SipH>::upd(&hs, &mut bs, x);
+        });
+        XS.iter().for_each(|&x| {
+            assert!(BFImpl::<BN, HN, SipH>::check(&hs, &bs, x));
+        });
+    }
+
+    #[test]
+    fn test_siph_upd_then_check_not_false_positive() {
+        let (hs, mut bs) = BFImpl::<BN, HN, SipH>::gen();
+        XS.iter().for_each(|&x| {
+            BFImpl::<BN, HN, SipH>::upd(&hs, &mut bs, x);
+        });
+        let x = b"\xb2_!\\\xdf\x1b\xac\xdc\xd0\xfa} \xad\x11\x8e\xeb";
+        assert_eq!(BFImpl::<BN, HN, SipH>::check(&hs, &bs, x), false);
+    }
+}

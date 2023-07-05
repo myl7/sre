@@ -16,6 +16,8 @@ aes = "0.8.3"
 rand = "0.8.5"
 sha2 = "0.10.7"
 hmac = "0.12.1"
+bitvec = "1.0.1"
+siphasher = "0.3.10"
 
 [dev-dependencies]
 rand = { version = "0.8.5", features = ["std", "std_rng"] }
