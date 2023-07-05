@@ -208,4 +208,25 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_ggm_punc_y_unchanged() {
+        let prf_key = GGMPuncPRF::<32, N, HmacSha256GGMKeyDerive>::setup(&mut thread_rng());
+        let punc_key0 = GGMPuncPRF::<32, N, HmacSha256GGMKeyDerive>::punc(&prf_key, &[]);
+        let ys0: Vec<_> = (0..N)
+            .into_iter()
+            .map(|x| GGMPuncPRF::<32, N, HmacSha256GGMKeyDerive>::eval(&punc_key0, x))
+            .collect();
+        let punc_key1 = GGMPuncPRF::<32, N, HmacSha256GGMKeyDerive>::punc(&prf_key, PUNC_POINTS);
+        let ys1: Vec<_> = (0..N)
+            .into_iter()
+            .map(|x| GGMPuncPRF::<32, N, HmacSha256GGMKeyDerive>::eval(&punc_key1, x))
+            .collect();
+        for (y0, y1) in ys0.iter().zip(ys1.iter()) {
+            match (y0, y1) {
+                (Some(y0_val), Some(y1_val)) => assert_eq!(y0_val, y1_val),
+                _ => (),
+            }
+        }
+    }
 }
