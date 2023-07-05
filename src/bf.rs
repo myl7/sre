@@ -32,7 +32,7 @@ pub trait BF<const BN: usize, const HN: usize, HS> {
 }
 
 /// Bloom filter implementation.
-/// `H` is seeded as https://github.com/shangqimonash/Aura/blob/master/BF/BloomFilter.h .
+/// `H` is seeded like [shangqimonash/Aura:BF/BloomFilter.h](https://github.com/shangqimonash/Aura/blob/master/BF/BloomFilter.h) .
 pub struct BFImpl<const BN: usize, const HN: usize, H>
 where
     H: BFImplH<BN>,

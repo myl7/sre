@@ -8,7 +8,13 @@ documentation = "https://github.com/myl7/sre#readme"
 homepage = "https://github.com/myl7/sre"
 repository = "https://github.com/myl7/sre.git"
 license = "Apache-2.0"
-keywords = ["crypto", "sre", "spe", "sse"]
+keywords = [
+  "crypto",
+  "symmetric-revocable-encryption",
+  "puncturable-prf",
+  "bloom-filter",
+  "symmetric-searchable-encryption",
+]
 categories = ["cryptography"]
 
 [dependencies]
