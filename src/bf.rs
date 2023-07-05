@@ -93,8 +93,8 @@ impl<const BN: usize> BFImplH<BN> for SipH<BN> {
     /// `usize` involved should be `u64`.
     fn h(x: &[u8], i: usize) -> usize {
         let mut hasher = SipHasher::new_with_keys(i as u64, 0);
-        hasher.write(&x);
-        hasher.finish() as usize % ((BN * 8) as usize)
+        hasher.write(x);
+        hasher.finish() as usize % (BN * 8)
     }
 }
 

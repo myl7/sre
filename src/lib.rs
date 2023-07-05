@@ -87,7 +87,6 @@ where
     fn enc(msk: &MSKImpl<LAMBDA, BN, HN>, m: &[u8], t: &[u8]) -> [Vec<u8>; HN] {
         let punc_key = GGMPuncPRF::<LAMBDA, N, KD>::punc(&msk.sk, &[]);
         (0..HN)
-            .into_iter()
             .map(|j| H::h(t, msk.hs[j]))
             .map(|i| GGMPuncPRF::<LAMBDA, N, KD>::eval(&punc_key, i).unwrap())
             .map(|sk| SEImpl::enc(&sk, m))
@@ -128,7 +127,7 @@ where
             })
             .and_then(|(hi, i_ast)| {
                 GGMPuncPRF::<LAMBDA, N, KD>::eval(&skr.ski, i_ast)
-                    .map(|sk| SEImpl::dec(&sk, &ct[hi]))
+                    .map(|sk| SEImpl::dec(&sk, ct[hi]))
             })
     }
 }

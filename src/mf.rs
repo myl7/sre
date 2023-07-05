@@ -74,7 +74,6 @@ where
     fn punc(k: &GGMPRFKey<LAMBDA>, ss: &[usize]) -> GGMPuncKey<LAMBDA> {
         let init_level = (N as f64).log2().ceil() as u32;
         let left_nodes: Vec<_> = (0..N)
-            .into_iter()
             .filter(|i| !ss.contains(i))
             .map(|i| GGMNode4MinCov {
                 i,
@@ -86,7 +85,7 @@ where
             .map(|GGMNode4MinCov { i, level }| {
                 let mut node = GGMNode {
                     i,
-                    key: k.init_key.clone(),
+                    key: k.init_key,
                     level,
                 };
                 ggm_key_derive_helper::<LAMBDA, KD>(&mut node.key, i, level, 0);
@@ -98,23 +97,21 @@ where
 
     fn eval(ks: &GGMPuncKey<LAMBDA>, x: usize) -> Option<[u8; LAMBDA]> {
         ks.nodes.iter().find_map(|node| {
-            (0..2_usize.pow(ks.init_level - node.level))
-                .into_iter()
-                .find_map(|j| {
-                    let new_i = usize::wrapping_add(node.i << (ks.init_level - node.level), j);
-                    let mut derived_key = node.key.clone();
-                    ggm_key_derive_helper::<LAMBDA, KD>(
-                        &mut derived_key,
-                        new_i,
-                        ks.init_level - node.level,
-                        0,
-                    );
-                    if new_i == x {
-                        Some(derived_key)
-                    } else {
-                        None
-                    }
-                })
+            (0..2_usize.pow(ks.init_level - node.level)).find_map(|j| {
+                let new_i = usize::wrapping_add(node.i << (ks.init_level - node.level), j);
+                let mut derived_key = node.key;
+                ggm_key_derive_helper::<LAMBDA, KD>(
+                    &mut derived_key,
+                    new_i,
+                    ks.init_level - node.level,
+                    0,
+                );
+                if new_i == x {
+                    Some(derived_key)
+                } else {
+                    None
+                }
+            })
         })
     }
 }
@@ -158,7 +155,7 @@ fn ggm_min_cover(nodes: Vec<GGMNode4MinCov>) -> Vec<GGMNode4MinCov> {
     if next_level_nodes.len() == nodes.len() || next_level_nodes.is_empty() {
         return nodes;
     }
-    return ggm_min_cover(next_level_nodes);
+    ggm_min_cover(next_level_nodes)
 }
 
 fn ggm_key_derive_helper<const LAMBDA: usize, KD>(
