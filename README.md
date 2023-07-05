@@ -1,5 +1,8 @@
 # sre
 
+[![Crates.io](https://img.shields.io/crates/d/sre)](https://crates.io/crates/sre)
+[![docs.rs](https://img.shields.io/docsrs/sre)](https://docs.rs/sre)
+
 Symmetric revocable encryption (SRE) implementation
 
 ## References
