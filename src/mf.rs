@@ -96,22 +96,21 @@ where
     }
 
     fn eval(ks: &GGMPuncKey<LAMBDA>, x: usize) -> Option<[u8; LAMBDA]> {
+        // `ks.nodes` covers the whole left tree without overlapping.
+        // `x` can find the node covering it by comparing its prefix.
         ks.nodes.iter().find_map(|node| {
-            (0..2_usize.pow(ks.init_level - node.level)).find_map(|j| {
-                let new_i = usize::wrapping_add(node.i << (ks.init_level - node.level), j);
+            if x >> (ks.init_level - node.level) == node.i {
                 let mut derived_key = node.key;
                 ggm_key_derive_helper::<LAMBDA, KD>(
                     &mut derived_key,
-                    new_i,
+                    x,
                     ks.init_level - node.level,
                     0,
                 );
-                if new_i == x {
-                    Some(derived_key)
-                } else {
-                    None
-                }
-            })
+                Some(derived_key)
+            } else {
+                None
+            }
         })
     }
 }
