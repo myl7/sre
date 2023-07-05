@@ -35,14 +35,14 @@ pub trait BF<const BN: usize, const HN: usize, HS> {
 /// `H` is seeded as https://github.com/shangqimonash/Aura/blob/master/BF/BloomFilter.h .
 pub struct BFImpl<const BN: usize, const HN: usize, H>
 where
-    H: BFImplH,
+    H: BFImplH<BN>,
 {
     _phantom: PhantomData<H>,
 }
 
 impl<const BN: usize, const HN: usize, H> BF<BN, HN, usize> for BFImpl<BN, HN, H>
 where
-    H: BFImplH,
+    H: BFImplH<BN>,
 {
     fn gen() -> ([usize; HN], [u8; BN]) {
         (std::array::from_fn(|i| i), [0; BN])
@@ -66,7 +66,7 @@ where
 /// API of hash function for the above Bloom filter implementation.
 /// $\rightarrow [b]$.
 /// See [`BF`] for `b`.
-pub trait BFImplH {
+pub trait BFImplH<const BN: usize> {
     /// Keyed hashing.
     /// `x` is the input to be hashed.
     /// `i` is the index of the hash function as the seed.
@@ -74,17 +74,17 @@ pub trait BFImplH {
 }
 
 /// SipHash 2-4 as hash function implementation
-pub struct SipH {
+pub struct SipH<const BN: usize> {
     pub i: u64,
 }
 
-impl BFImplH for SipH {
+impl<const BN: usize> BFImplH<BN> for SipH<BN> {
     /// Returns `u64` actually.
     /// `usize` involved should be `u64`.
     fn h(x: &[u8], i: usize) -> usize {
         let mut hasher = SipHasher::new_with_keys(i as u64, 0);
         hasher.write(&x);
-        hasher.finish() as usize
+        hasher.finish() as usize % ((BN * 8) as usize)
     }
 }
 
@@ -103,22 +103,22 @@ mod tests {
 
     #[test]
     fn test_siph_upd_then_check_ok() {
-        let (hs, mut bs) = BFImpl::<BN, HN, SipH>::gen();
+        let (hs, mut bs) = BFImpl::<BN, HN, SipH<BN>>::gen();
         XS.iter().for_each(|&x| {
-            BFImpl::<BN, HN, SipH>::upd(&hs, &mut bs, x);
+            BFImpl::<BN, HN, SipH<BN>>::upd(&hs, &mut bs, x);
         });
         XS.iter().for_each(|&x| {
-            assert!(BFImpl::<BN, HN, SipH>::check(&hs, &bs, x));
+            assert!(BFImpl::<BN, HN, SipH<BN>>::check(&hs, &bs, x));
         });
     }
 
     #[test]
     fn test_siph_upd_then_check_not_false_positive() {
-        let (hs, mut bs) = BFImpl::<BN, HN, SipH>::gen();
+        let (hs, mut bs) = BFImpl::<BN, HN, SipH<BN>>::gen();
         XS.iter().for_each(|&x| {
-            BFImpl::<BN, HN, SipH>::upd(&hs, &mut bs, x);
+            BFImpl::<BN, HN, SipH<BN>>::upd(&hs, &mut bs, x);
         });
         let x = b"\xb2_!\\\xdf\x1b\xac\xdc\xd0\xfa} \xad\x11\x8e\xeb";
-        assert_eq!(BFImpl::<BN, HN, SipH>::check(&hs, &bs, x), false);
+        assert_eq!(BFImpl::<BN, HN, SipH<BN>>::check(&hs, &bs, x), false);
     }
 }

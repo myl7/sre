@@ -67,7 +67,7 @@ where
         let init_level = (N as f64).log2().ceil() as u32;
         let left_nodes: Vec<_> = (0..N)
             .into_iter()
-            .filter(|i| ss.contains(i))
+            .filter(|i| !ss.contains(i))
             .map(|i| GGMNode4MinCov {
                 i,
                 level: init_level,
@@ -202,9 +202,9 @@ mod tests {
         for x in 0..N {
             let y = GGMPuncPRF::<32, N, HmacSha256GGMKeyDerive>::eval(&punc_key, x);
             if PUNC_POINTS.contains(&x) {
-                assert!(y.is_some());
-            } else {
                 assert!(y.is_none());
+            } else {
+                assert!(y.is_some());
             }
         }
     }
