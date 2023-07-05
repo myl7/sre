@@ -10,10 +10,10 @@ repository = "https://github.com/myl7/sre.git"
 license = "Apache-2.0"
 keywords = [
   "crypto",
-  "symmetric-revocable-encryption",
+  "sym-revocable-enc",
   "puncturable-prf",
   "bloom-filter",
-  "symmetric-searchable-encryption",
+  "sse",
 ]
 categories = ["cryptography"]
 
