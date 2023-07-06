@@ -38,6 +38,15 @@ pub trait MF<const N: usize, K, PK, Y> {
     ///
     /// Returns `Y` if `$x \notin S$` otherwise `None`.
     fn eval(ks: &PK, x: usize) -> Option<Y>;
+    /// `F`.
+    ///
+    /// It works like `kp = punc(k, [])` then `eval(kp, x)`, which is the default implementation.
+    /// Provided for possible optimization.
+    /// Or say this is the actual start point.
+    fn f(k: &K, x: usize) -> Option<Y> {
+        let kp = Self::punc(k, &[]);
+        Self::eval(&kp, x)
+    }
 }
 
 /// GGM tree-based PRF as multi-puncturable PRF implementation.
@@ -95,9 +104,9 @@ where
         GGMPuncKey { nodes, init_level }
     }
 
+    /// `ks.nodes` covers the whole left tree without overlapping.
+    /// `x` can find the node covering it by comparing its prefix.
     fn eval(ks: &GGMPuncKey<LAMBDA>, x: usize) -> Option<[u8; LAMBDA]> {
-        // `ks.nodes` covers the whole left tree without overlapping.
-        // `x` can find the node covering it by comparing its prefix.
         ks.nodes.iter().find_map(|node| {
             if x >> (ks.init_level - node.level) == node.i {
                 let mut derived_key = node.key;
@@ -112,6 +121,18 @@ where
                 None
             }
         })
+    }
+
+    /// No need to compute the minimum coverage.
+    /// Just use the binary form of `x` to derive the key.
+    fn f(k: &GGMPRFKey<LAMBDA>, x: usize) -> Option<[u8; LAMBDA]> {
+        if x >= N {
+            return None;
+        }
+        let init_level = (N as f64).log2().ceil() as u32;
+        let mut derived_key = k.init_key;
+        ggm_key_derive_helper::<LAMBDA, KD>(&mut derived_key, x, init_level, 0);
+        Some(derived_key)
     }
 }
 
@@ -157,6 +178,9 @@ fn ggm_min_cover(nodes: Vec<GGMNode4MinCov>) -> Vec<GGMNode4MinCov> {
     ggm_min_cover(next_level_nodes)
 }
 
+/// Bit-by-bit rotation to ensure when `a = b || c`, `derive(k, a) = derive(derive(k, b), c)`.
+///
+/// Maybe there is a faster way, but this is from [shangqimonash/Aura](https://github.com/shangqimonash/Aura) .
 fn ggm_key_derive_helper<const LAMBDA: usize, KD>(
     key: &mut [u8; LAMBDA],
     i: usize,
