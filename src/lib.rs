@@ -34,7 +34,7 @@ pub trait SRE<const LAMBDA: usize, const HN: usize, MSK, SKR> {
 
 /// Symmetric revocable encryption implementation.
 ///
-/// To avoid #![feature(generic_const_exprs)], it is your responsibility to ensure `N = BN * 8`.
+/// To avoid `#![feature(generic_const_exprs)]`, it is **your responsibility** to ensure `N = BN * 8`.
 pub struct SREImpl<
     const LAMBDA: usize,
     const BN: usize,
@@ -53,7 +53,7 @@ pub struct SREImpl<
     _se: PhantomData<SEImpl>,
 }
 
-/// `msk`. Secret key of Symmetric revocable encryption.
+/// `msk`. Secret key of symmetric revocable encryption.
 pub struct MSKImpl<const LAMBDA: usize, const BN: usize, const HN: usize> {
     pub sk: GGMPRFKey<LAMBDA>,
     pub hs: [usize; HN],
