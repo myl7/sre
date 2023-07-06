@@ -152,7 +152,10 @@ pub struct GGMNode<const LAMBDA: usize> {
     pub level: u32,
 }
 
-/// Find minimum coverage of GGM tree, which is stored in a vector
+/// Find minimum coverage of GGM tree, which is stored in a vector.
+///
+/// `i` of the node representing the position in the binary tree is in the MSB form,
+/// which means for `0b1010`, the topest branch is `1`.
 fn ggm_min_cover(nodes: Vec<GGMNode4MinCov>) -> Vec<GGMNode4MinCov> {
     let mut next_level_nodes = vec![];
     let mut i = 0;
