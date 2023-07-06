@@ -109,10 +109,9 @@ where
     }
 
     fn dec(skr: &SKRImpl<LAMBDA, BN, HN, usize>, ct: [&[u8]; HN], t: &[u8]) -> Option<Vec<u8>> {
-        // We do not use this because we need the intermediate hash results
-        // if BFImpl::<BN, HN, H>::check(&skr.hs, &skr.bs, t) {
-        //     return None;
-        // }
+        if BFImpl::<BN, HN, H>::check(&skr.hs, &skr.bs, t) {
+            return None;
+        }
         skr.hs
             .iter()
             .enumerate()
@@ -174,5 +173,33 @@ mod tests {
                 TAGS[0],
             );
         assert_eq!(m, Some(PLAINTXT.to_vec()));
+    }
+
+    #[test]
+    fn test_sre_enc_then_dec_punctured() {
+        let msk =
+            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::kgen(
+                &mut thread_rng(),
+            );
+        let ct =
+            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::enc(
+                &msk, PLAINTXT, TAGS[1],
+            );
+        let skr =
+            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::krev(
+                &msk,
+                &TAGS[1..],
+            );
+        let m =
+            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::dec(
+                &skr,
+                ct.iter()
+                    .map(|cti| cti.as_ref())
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap(),
+                TAGS[1],
+            );
+        assert_eq!(m, None);
     }
 }
