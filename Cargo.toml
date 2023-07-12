@@ -1,6 +1,6 @@
 [package]
 name = "sre"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["myl7 <myl@myl.moe>"]
 edition = "2021"
 description = "Symmetric revocable encryption implementation"
