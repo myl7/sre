@@ -1,13 +1,13 @@
 // Copyright (C) myl7
 // SPDX-License-Identifier: Apache-2.0
 
-//! See [`SE`]
+//! See [`SymmEnc`]
 
 use crypto_secretbox::aead::{Aead, AeadCore, KeyInit, OsRng};
 use crypto_secretbox::{Key, Nonce, XSalsa20Poly1305};
 
 /// `SE`. API of standard symmetric encryption.
-pub trait SE<const LAMBDA: usize> {
+pub trait SymmEnc<const LAMBDA: usize> {
     /// `SE.Gen`. Unused.
     fn gen() -> [u8; LAMBDA] {
         unimplemented!("Unused in SRE");
@@ -27,7 +27,7 @@ pub trait SE<const LAMBDA: usize> {
 // NaCl `crypto_secretbox` as symmetric encryption, which uses XSalsa20-Poly1305.
 pub struct CryptoSecretBox;
 
-impl SE<{ XSalsa20Poly1305::KEY_SIZE }> for CryptoSecretBox {
+impl SymmEnc<{ XSalsa20Poly1305::KEY_SIZE }> for CryptoSecretBox {
     fn enc(sk: &[u8; XSalsa20Poly1305::KEY_SIZE], m: &[u8]) -> Vec<u8> {
         let key = Key::from_slice(sk);
         let cipher = XSalsa20Poly1305::new(key);

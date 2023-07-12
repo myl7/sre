@@ -1,10 +1,9 @@
 // Copyright (C) myl7
 // SPDX-License-Identifier: Apache-2.0
 
-//! See [`BF`]
+//! See [`Bloom`]
 
 use std::hash::Hasher;
-use std::marker::PhantomData;
 
 use bitvec::prelude::*;
 use siphasher::sip::SipHasher;
@@ -19,20 +18,20 @@ use siphasher::sip::SipHasher;
 ///   Generic parameter `BN` is the **byte** len of `B`. So `b = BN * 8`.
 /// - Generic parameter `HN = h`.
 /// - Generic parameter `HS` is for hash function states. Refers to `H` in the paper.
-pub trait BF<const BN: usize, const HN: usize, HS> {
+pub trait Bloom<const BN: usize, const HN: usize, HS> {
     /// `BF.Gen`.
     ///
     /// Returns `h` hash functions and `B`.
     fn gen() -> ([HS; HN], [u8; BN]);
     /// `BF.Upd`.
     ///
-    /// - `hs` is all hash functions.
+    /// - `hs` is all hash function instances.
     /// - `bs` is `B`. Modified in-place.
     /// - `x` is the input to be hashed.
     fn upd(hs: &[HS; HN], bs: &mut [u8; BN], x: &[u8]);
     /// `BF.Check`
     ///
-    /// - `hs` is all hash functions.
+    /// - `hs` is all hash function instances.
     /// - `bs` is `B`.
     /// - `x` is the input to be hashed.
     fn check(hs: &[HS; HN], bs: &[u8; BN], x: &[u8]) -> bool;
@@ -40,17 +39,30 @@ pub trait BF<const BN: usize, const HN: usize, HS> {
 
 /// Bloom filter implementation.
 ///
-/// `H` is seeded like [shangqimonash/Aura:BF/BloomFilter.h](https://github.com/shangqimonash/Aura/blob/master/BF/BloomFilter.h) .
-pub struct BFImpl<const BN: usize, const HN: usize, H>
+/// `H` is seeded like [shangqimonash/Aura:BF/BloomFilter.h].
+///
+/// [shangqimonash/Aura:BF/BloomFilter.h]: https://github.com/shangqimonash/Aura/blob/master/BF/BloomFilter.h
+pub struct BloomImpl<const BN: usize, const HN: usize, H>
 where
-    H: BFImplH<BN>,
+    H: BloomH<BN>,
 {
-    _phantom: PhantomData<H>,
+    // TODO: Instantiation
+    #[allow(dead_code)]
+    h_impl: H,
 }
 
-impl<const BN: usize, const HN: usize, H> BF<BN, HN, usize> for BFImpl<BN, HN, H>
+impl<const BN: usize, const HN: usize, H> BloomImpl<BN, HN, H>
 where
-    H: BFImplH<BN>,
+    H: BloomH<BN>,
+{
+    pub fn new(h_impl: H) -> Self {
+        Self { h_impl }
+    }
+}
+
+impl<const BN: usize, const HN: usize, H> Bloom<BN, HN, usize> for BloomImpl<BN, HN, H>
+where
+    H: BloomH<BN>,
 {
     fn gen() -> ([usize; HN], [u8; BN]) {
         (std::array::from_fn(|i| i), [0; BN])
@@ -73,8 +85,8 @@ where
 
 /// API of hash function for the above Bloom filter implementation.
 ///
-/// `$\rightarrow [b]$`. See [`BF`] for `b`.
-pub trait BFImplH<const BN: usize> {
+/// `$\rightarrow [b]$`. See [`Bloom`] for `b`.
+pub trait BloomH<const BN: usize> {
     /// Keyed hashing.
     ///
     /// - `x` is the input to be hashed.
@@ -87,7 +99,7 @@ pub struct SipH<const BN: usize> {
     pub i: u64,
 }
 
-impl<const BN: usize> BFImplH<BN> for SipH<BN> {
+impl<const BN: usize> BloomH<BN> for SipH<BN> {
     /// Returns `u64` actually.
     ///
     /// `usize` involved should be `u64`.
@@ -113,22 +125,22 @@ mod tests {
 
     #[test]
     fn test_siph_upd_then_check_ok() {
-        let (hs, mut bs) = BFImpl::<BN, HN, SipH<BN>>::gen();
+        let (hs, mut bs) = BloomImpl::<BN, HN, SipH<BN>>::gen();
         XS.iter().for_each(|&x| {
-            BFImpl::<BN, HN, SipH<BN>>::upd(&hs, &mut bs, x);
+            BloomImpl::<BN, HN, SipH<BN>>::upd(&hs, &mut bs, x);
         });
         XS.iter().for_each(|&x| {
-            assert!(BFImpl::<BN, HN, SipH<BN>>::check(&hs, &bs, x));
+            assert!(BloomImpl::<BN, HN, SipH<BN>>::check(&hs, &bs, x));
         });
     }
 
     #[test]
     fn test_siph_upd_then_check_not_false_positive() {
-        let (hs, mut bs) = BFImpl::<BN, HN, SipH<BN>>::gen();
+        let (hs, mut bs) = BloomImpl::<BN, HN, SipH<BN>>::gen();
         XS.iter().for_each(|&x| {
-            BFImpl::<BN, HN, SipH<BN>>::upd(&hs, &mut bs, x);
+            BloomImpl::<BN, HN, SipH<BN>>::upd(&hs, &mut bs, x);
         });
         let x = b"\xb2_!\\\xdf\x1b\xac\xdc\xd0\xfa} \xad\x11\x8e\xeb";
-        assert_eq!(BFImpl::<BN, HN, SipH<BN>>::check(&hs, &bs, x), false);
+        assert_eq!(BloomImpl::<BN, HN, SipH<BN>>::check(&hs, &bs, x), false);
     }
 }

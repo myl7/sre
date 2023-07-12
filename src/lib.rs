@@ -1,25 +1,23 @@
 // Copyright (C) myl7
 // SPDX-License-Identifier: Apache-2.0
 
-//! See [`SRE`]
+//! See [`Sre`]
 
-pub mod bf;
-pub mod mf;
-pub mod se;
-
-use std::marker::PhantomData;
+pub mod bloom;
+pub mod multi_punc_prf;
+pub mod symm_enc;
 
 use bitvec::prelude::*;
 use rand::prelude::*;
 
-use crate::bf::{BFImpl, BFImplH, BF};
-use crate::mf::{GGMKeyDerive, GGMPRFKey, GGMPuncKey, GGMPuncPRF, MF};
-use crate::se::SE;
+use crate::bloom::{Bloom, BloomH, BloomImpl};
+use crate::multi_punc_prf::{GgmKeyDerive, GgmMultiPuncPrf, GgmPrfKey, GgmPuncKey, MultiPuncPrf};
+use crate::symm_enc::SymmEnc;
 
 /// `SRE`. API of symmetric revocable encryption.
 ///
-/// See [`bf::BF`] for `BN` and `HN`.
-pub trait SRE<const LAMBDA: usize, const HN: usize, MSK, SKR> {
+/// See [`bf::Bloom`] for `BN` and `HN`.
+pub trait Sre<const LAMBDA: usize, const HN: usize, MSK, SKR> {
     /// `SRE.KGen`
     fn kgen<R>(rng: &mut R) -> MSK
     where
@@ -35,81 +33,80 @@ pub trait SRE<const LAMBDA: usize, const HN: usize, MSK, SKR> {
 /// Symmetric revocable encryption implementation.
 ///
 /// To avoid `#![feature(generic_const_exprs)]`, it is **your responsibility** to ensure `N = BN * 8`.
-pub struct SREImpl<
-    const LAMBDA: usize,
-    const BN: usize,
-    const N: usize,
-    const HN: usize,
-    H,
-    KD,
-    SEImpl,
-> where
-    H: BFImplH<BN>,
-    KD: GGMKeyDerive<LAMBDA>,
-    SEImpl: SE<LAMBDA>,
+pub struct SreImpl<const LAMBDA: usize, const BN: usize, const N: usize, const HN: usize, H, KD, SE>
+where
+    H: BloomH<BN>,
+    KD: GgmKeyDerive<LAMBDA>,
+    SE: SymmEnc<LAMBDA>,
 {
-    _h: PhantomData<H>,
-    _kd: PhantomData<KD>,
-    _se: PhantomData<SEImpl>,
+    // TODO: Instantiation
+    #[allow(dead_code)]
+    h: H,
+    // TODO: Instantiation
+    #[allow(dead_code)]
+    kd: KD,
+    // TODO: Instantiation
+    #[allow(dead_code)]
+    se: SE,
 }
 
 /// `msk`. Secret key of symmetric revocable encryption.
-pub struct MSKImpl<const LAMBDA: usize, const BN: usize, const HN: usize> {
-    pub sk: GGMPRFKey<LAMBDA>,
+pub struct MskImpl<const LAMBDA: usize, const BN: usize, const HN: usize> {
+    pub sk: GgmPrfKey<LAMBDA>,
     pub hs: [usize; HN],
     pub bs: [u8; BN],
 }
 
 /// `$sk_R$`
-pub struct SKRImpl<const LAMBDA: usize, const BN: usize, const HN: usize, HS> {
-    pub ski: GGMPuncKey<LAMBDA>,
+pub struct SkrImpl<const LAMBDA: usize, const BN: usize, const HN: usize, HS> {
+    pub ski: GgmPuncKey<LAMBDA>,
     pub hs: [HS; HN],
     pub bs: [u8; BN],
 }
 
-impl<const LAMBDA: usize, const BN: usize, const N: usize, const HN: usize, H, KD, SEImpl>
-    SRE<LAMBDA, HN, MSKImpl<LAMBDA, BN, HN>, SKRImpl<LAMBDA, BN, HN, usize>>
-    for SREImpl<LAMBDA, BN, N, HN, H, KD, SEImpl>
+impl<const LAMBDA: usize, const BN: usize, const N: usize, const HN: usize, H, KD, SE>
+    Sre<LAMBDA, HN, MskImpl<LAMBDA, BN, HN>, SkrImpl<LAMBDA, BN, HN, usize>>
+    for SreImpl<LAMBDA, BN, N, HN, H, KD, SE>
 where
-    H: BFImplH<BN>,
-    KD: GGMKeyDerive<LAMBDA>,
-    SEImpl: SE<LAMBDA>,
+    H: BloomH<BN>,
+    KD: GgmKeyDerive<LAMBDA>,
+    SE: SymmEnc<LAMBDA>,
 {
-    fn kgen<R>(rng: &mut R) -> MSKImpl<LAMBDA, BN, HN>
+    fn kgen<R>(rng: &mut R) -> MskImpl<LAMBDA, BN, HN>
     where
         R: Rng + ?Sized,
     {
-        let (hs, bs) = BFImpl::<BN, HN, H>::gen();
-        let sk = GGMPuncPRF::<LAMBDA, N, KD>::setup(rng);
-        MSKImpl::<LAMBDA, BN, HN> { sk, hs, bs }
+        let (hs, bs) = BloomImpl::<BN, HN, H>::gen();
+        let sk = GgmMultiPuncPrf::<LAMBDA, N, KD>::setup(rng);
+        MskImpl::<LAMBDA, BN, HN> { sk, hs, bs }
     }
 
-    fn enc(msk: &MSKImpl<LAMBDA, BN, HN>, m: &[u8], t: &[u8]) -> [Vec<u8>; HN] {
+    fn enc(msk: &MskImpl<LAMBDA, BN, HN>, m: &[u8], t: &[u8]) -> [Vec<u8>; HN] {
         (0..HN)
             .map(|j| H::h(t, msk.hs[j]))
-            .map(|i| GGMPuncPRF::<LAMBDA, N, KD>::f(&msk.sk, i).unwrap())
-            .map(|sk| SEImpl::enc(&sk, m))
+            .map(|i| GgmMultiPuncPrf::<LAMBDA, N, KD>::f(&msk.sk, i).unwrap())
+            .map(|sk| SE::enc(&sk, m))
             .collect::<Vec<_>>()
             .try_into()
             .unwrap()
     }
 
-    fn krev(msk: &MSKImpl<LAMBDA, BN, HN>, r: &[&[u8]]) -> SKRImpl<LAMBDA, BN, HN, usize> {
+    fn krev(msk: &MskImpl<LAMBDA, BN, HN>, r: &[&[u8]]) -> SkrImpl<LAMBDA, BN, HN, usize> {
         assert!(r.len() <= N);
         let mut bs_buf = msk.bs.to_owned();
         r.iter()
-            .for_each(|t| BFImpl::<BN, HN, H>::upd(&msk.hs, &mut bs_buf, t));
+            .for_each(|t| BloomImpl::<BN, HN, H>::upd(&msk.hs, &mut bs_buf, t));
         let is: Vec<_> = bs_buf.view_bits::<Lsb0>().iter_ones().collect();
-        let punc_key = GGMPuncPRF::<LAMBDA, N, KD>::punc(&msk.sk, &is);
-        SKRImpl {
+        let punc_key = GgmMultiPuncPrf::<LAMBDA, N, KD>::punc(&msk.sk, &is);
+        SkrImpl {
             ski: punc_key,
             hs: msk.hs.to_owned(),
             bs: bs_buf,
         }
     }
 
-    fn dec(skr: &SKRImpl<LAMBDA, BN, HN, usize>, ct: [&[u8]; HN], t: &[u8]) -> Option<Vec<u8>> {
-        if BFImpl::<BN, HN, H>::check(&skr.hs, &skr.bs, t) {
+    fn dec(skr: &SkrImpl<LAMBDA, BN, HN, usize>, ct: [&[u8]; HN], t: &[u8]) -> Option<Vec<u8>> {
+        if BloomImpl::<BN, HN, H>::check(&skr.hs, &skr.bs, t) {
             return None;
         }
         skr.hs
@@ -124,8 +121,8 @@ where
                 }
             })
             .and_then(|(hi, i_ast)| {
-                GGMPuncPRF::<LAMBDA, N, KD>::eval(&skr.ski, i_ast)
-                    .map(|sk| SEImpl::dec(&sk, ct[hi]))
+                GgmMultiPuncPrf::<LAMBDA, N, KD>::eval(&skr.ski, i_ast)
+                    .map(|sk| SE::dec(&sk, ct[hi]))
             })
     }
 }
@@ -136,9 +133,9 @@ mod tests {
 
     use rand::thread_rng;
 
-    use crate::bf::SipH;
-    use crate::mf::HmacSha256GGMKeyDerive;
-    use crate::se::CryptoSecretBox;
+    use crate::bloom::SipH;
+    use crate::multi_punc_prf::HmacSha256GgmKeyDerive;
+    use crate::symm_enc::CryptoSecretBox;
 
     const LAMBDA: usize = 32;
     const BN: usize = 8192;
@@ -150,20 +147,20 @@ mod tests {
     #[test]
     fn test_sre_enc_then_dec_ok() {
         let msk =
-            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::kgen(
+            SreImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GgmKeyDerive, CryptoSecretBox>::kgen(
                 &mut thread_rng(),
             );
         let ct =
-            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::enc(
+            SreImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GgmKeyDerive, CryptoSecretBox>::enc(
                 &msk, PLAINTXT, TAGS[0],
             );
         let skr =
-            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::krev(
+            SreImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GgmKeyDerive, CryptoSecretBox>::krev(
                 &msk,
                 &TAGS[1..],
             );
         let m =
-            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::dec(
+            SreImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GgmKeyDerive, CryptoSecretBox>::dec(
                 &skr,
                 ct.iter()
                     .map(|cti| cti.as_ref())
@@ -178,20 +175,20 @@ mod tests {
     #[test]
     fn test_sre_enc_then_dec_punctured() {
         let msk =
-            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::kgen(
+            SreImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GgmKeyDerive, CryptoSecretBox>::kgen(
                 &mut thread_rng(),
             );
         let ct =
-            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::enc(
+            SreImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GgmKeyDerive, CryptoSecretBox>::enc(
                 &msk, PLAINTXT, TAGS[1],
             );
         let skr =
-            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::krev(
+            SreImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GgmKeyDerive, CryptoSecretBox>::krev(
                 &msk,
                 &TAGS[1..],
             );
         let m =
-            SREImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GGMKeyDerive, CryptoSecretBox>::dec(
+            SreImpl::<LAMBDA, BN, N, HN, SipH<BN>, HmacSha256GgmKeyDerive, CryptoSecretBox>::dec(
                 &skr,
                 ct.iter()
                     .map(|cti| cti.as_ref())
