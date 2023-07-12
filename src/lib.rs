@@ -140,7 +140,12 @@ where
     }
 }
 
-#[cfg(test)]
+#[cfg(all(
+    test,
+    feature = "bloom-h",
+    feature = "ggm-key-derive",
+    feature = "symm-enc"
+))]
 mod tests {
     use super::*;
 

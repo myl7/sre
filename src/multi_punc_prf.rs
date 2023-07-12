@@ -3,9 +3,9 @@
 
 //! See [`MultiPuncPrf`]
 
-use hmac::{Hmac, Mac};
+#[cfg(feature = "ggm-key-derive")]
+pub use ggm_key_derive_impl::*;
 use rand::prelude::*;
-use sha2::Sha256;
 
 /// `MF`. API of multi-puncturable PRF.
 /// Refers to `t`-Punc-PRF with an addtional property.
@@ -209,26 +209,34 @@ pub trait GgmKeyDerive<const LAMBDA: usize> {
     fn key_derive(&self, key: &mut [u8; LAMBDA], input: &[u8]);
 }
 
-#[derive(Default)]
-pub struct HmacSha256GgmKeyDerive;
+#[cfg(feature = "ggm-key-derive")]
+pub mod ggm_key_derive_impl {
+    use super::*;
 
-impl HmacSha256GgmKeyDerive {
-    pub fn new() -> Self {
-        Self
+    use hmac::{Hmac, Mac};
+    use sha2::Sha256;
+
+    #[derive(Default)]
+    pub struct HmacSha256GgmKeyDerive;
+
+    impl HmacSha256GgmKeyDerive {
+        pub fn new() -> Self {
+            Self
+        }
+    }
+
+    impl GgmKeyDerive<32> for HmacSha256GgmKeyDerive {
+        fn key_derive(&self, key: &mut [u8; 32], input: &[u8]) {
+            let mut mac = Hmac::<Sha256>::new_from_slice(key).unwrap();
+            mac.update(input);
+            let result = mac.finalize();
+            let code_bytes = result.into_bytes();
+            key.copy_from_slice(&code_bytes);
+        }
     }
 }
 
-impl GgmKeyDerive<32> for HmacSha256GgmKeyDerive {
-    fn key_derive(&self, key: &mut [u8; 32], input: &[u8]) {
-        let mut mac = Hmac::<Sha256>::new_from_slice(key).unwrap();
-        mac.update(input);
-        let result = mac.finalize();
-        let code_bytes = result.into_bytes();
-        key.copy_from_slice(&code_bytes);
-    }
-}
-
-#[cfg(test)]
+#[cfg(all(test, feature = "ggm-key-derive"))]
 mod tests {
     use super::*;
 

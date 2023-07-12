@@ -3,10 +3,10 @@
 
 //! See [`Bloom`]
 
-use std::hash::Hasher;
-
 use bitvec::prelude::*;
-use siphasher::sip::SipHasher;
+
+#[cfg(feature = "bloom-h")]
+pub use bloom_h_impl::*;
 
 /// `BF`. API of `(b, h, n)`-Bloom filter.
 ///
@@ -96,28 +96,37 @@ pub trait BloomH<const BN: usize> {
     fn hash(&self, x: &[u8], i: usize) -> usize;
 }
 
-/// SipHash 2-4 as hash function implementation
-#[derive(Default)]
-pub struct SipH<const BN: usize>;
+#[cfg(feature = "bloom-h")]
+pub mod bloom_h_impl {
+    use super::*;
 
-impl<const BN: usize> SipH<BN> {
-    pub fn new() -> Self {
-        Self
+    use std::hash::Hasher;
+
+    use siphasher::sip::SipHasher;
+
+    /// SipHash 2-4 as hash function implementation
+    #[derive(Default)]
+    pub struct SipH<const BN: usize>;
+
+    impl<const BN: usize> SipH<BN> {
+        pub fn new() -> Self {
+            Self
+        }
+    }
+
+    impl<const BN: usize> BloomH<BN> for SipH<BN> {
+        /// Returns `u64` actually.
+        ///
+        /// `usize` involved should be `u64`.
+        fn hash(&self, x: &[u8], i: usize) -> usize {
+            let mut hasher = SipHasher::new_with_keys(i as u64, 0);
+            hasher.write(x);
+            hasher.finish() as usize % (BN * 8)
+        }
     }
 }
 
-impl<const BN: usize> BloomH<BN> for SipH<BN> {
-    /// Returns `u64` actually.
-    ///
-    /// `usize` involved should be `u64`.
-    fn hash(&self, x: &[u8], i: usize) -> usize {
-        let mut hasher = SipHasher::new_with_keys(i as u64, 0);
-        hasher.write(x);
-        hasher.finish() as usize % (BN * 8)
-    }
-}
-
-#[cfg(test)]
+#[cfg(all(test, feature = "bloom-h"))]
 mod tests {
     use super::*;
 
