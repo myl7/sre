@@ -12,7 +12,7 @@ use siphasher::sip::SipHasher;
 ///
 /// - `n` is the maximum number of elements to be inserted.
 /// - `b` is the number of Bloom filter entries.
-/// - `h` is the number of hash functions.
+/// - Number `h` is the number of hash functions.
 ///
 /// - `B` is a `b`-bit array as the state.
 ///   Generic parameter `BN` is the **byte** len of `B`. So `b = BN * 8`.
@@ -22,19 +22,19 @@ pub trait Bloom<const BN: usize, const HN: usize, HS> {
     /// `BF.Gen`.
     ///
     /// Returns `h` hash functions and `B`.
-    fn gen() -> ([HS; HN], [u8; BN]);
+    fn gen(&self) -> ([HS; HN], [u8; BN]);
     /// `BF.Upd`.
     ///
     /// - `hs` is all hash function instances.
     /// - `bs` is `B`. Modified in-place.
     /// - `x` is the input to be hashed.
-    fn upd(hs: &[HS; HN], bs: &mut [u8; BN], x: &[u8]);
+    fn upd(&self, hs: &[HS; HN], bs: &mut [u8; BN], x: &[u8]);
     /// `BF.Check`
     ///
     /// - `hs` is all hash function instances.
     /// - `bs` is `B`.
     /// - `x` is the input to be hashed.
-    fn check(hs: &[HS; HN], bs: &[u8; BN], x: &[u8]) -> bool;
+    fn check(&self, hs: &[HS; HN], bs: &[u8; BN], x: &[u8]) -> bool;
 }
 
 /// Bloom filter implementation.
@@ -46,17 +46,19 @@ pub struct BloomImpl<const BN: usize, const HN: usize, H>
 where
     H: BloomH<BN>,
 {
-    // TODO: Instantiation
-    #[allow(dead_code)]
-    h_impl: H,
+    h: H,
 }
 
 impl<const BN: usize, const HN: usize, H> BloomImpl<BN, HN, H>
 where
     H: BloomH<BN>,
 {
-    pub fn new(h_impl: H) -> Self {
-        Self { h_impl }
+    pub fn new(h: H) -> Self {
+        Self { h }
+    }
+
+    pub fn h(&self) -> &H {
+        &self.h
     }
 }
 
@@ -64,20 +66,20 @@ impl<const BN: usize, const HN: usize, H> Bloom<BN, HN, usize> for BloomImpl<BN,
 where
     H: BloomH<BN>,
 {
-    fn gen() -> ([usize; HN], [u8; BN]) {
+    fn gen(&self) -> ([usize; HN], [u8; BN]) {
         (std::array::from_fn(|i| i), [0; BN])
     }
 
-    fn upd(hs: &[usize; HN], bs: &mut [u8; BN], x: &[u8]) {
+    fn upd(&self, hs: &[usize; HN], bs: &mut [u8; BN], x: &[u8]) {
         hs.iter().for_each(|&i| {
-            let index = H::h(x, i) % BN;
+            let index = self.h.hash(x, i) % BN;
             bs.view_bits_mut::<Lsb0>().set(index, true);
         })
     }
 
-    fn check(hs: &[usize; HN], bs: &[u8; BN], x: &[u8]) -> bool {
+    fn check(&self, hs: &[usize; HN], bs: &[u8; BN], x: &[u8]) -> bool {
         hs.iter().all(|&i| {
-            let index = H::h(x, i) % BN;
+            let index = self.h.hash(x, i) % BN;
             bs.view_bits::<Lsb0>()[index]
         })
     }
@@ -91,19 +93,24 @@ pub trait BloomH<const BN: usize> {
     ///
     /// - `x` is the input to be hashed.
     /// - `i` is the index of the hash function as the seed.
-    fn h(x: &[u8], i: usize) -> usize;
+    fn hash(&self, x: &[u8], i: usize) -> usize;
 }
 
 /// SipHash 2-4 as hash function implementation
-pub struct SipH<const BN: usize> {
-    pub i: u64,
+#[derive(Default)]
+pub struct SipH<const BN: usize>;
+
+impl<const BN: usize> SipH<BN> {
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl<const BN: usize> BloomH<BN> for SipH<BN> {
     /// Returns `u64` actually.
     ///
     /// `usize` involved should be `u64`.
-    fn h(x: &[u8], i: usize) -> usize {
+    fn hash(&self, x: &[u8], i: usize) -> usize {
         let mut hasher = SipHasher::new_with_keys(i as u64, 0);
         hasher.write(x);
         hasher.finish() as usize % (BN * 8)
@@ -125,22 +132,26 @@ mod tests {
 
     #[test]
     fn test_siph_upd_then_check_ok() {
-        let (hs, mut bs) = BloomImpl::<BN, HN, SipH<BN>>::gen();
+        let h_impl = SipH::<BN>::new();
+        let bf = BloomImpl::<BN, HN, _>::new(h_impl);
+        let (hs, mut bs) = bf.gen();
         XS.iter().for_each(|&x| {
-            BloomImpl::<BN, HN, SipH<BN>>::upd(&hs, &mut bs, x);
+            bf.upd(&hs, &mut bs, x);
         });
         XS.iter().for_each(|&x| {
-            assert!(BloomImpl::<BN, HN, SipH<BN>>::check(&hs, &bs, x));
+            assert!(bf.check(&hs, &bs, x));
         });
     }
 
     #[test]
     fn test_siph_upd_then_check_not_false_positive() {
-        let (hs, mut bs) = BloomImpl::<BN, HN, SipH<BN>>::gen();
+        let h_impl = SipH::<BN>::new();
+        let bf = BloomImpl::<BN, HN, _>::new(h_impl);
+        let (hs, mut bs) = bf.gen();
         XS.iter().for_each(|&x| {
-            BloomImpl::<BN, HN, SipH<BN>>::upd(&hs, &mut bs, x);
+            bf.upd(&hs, &mut bs, x);
         });
         let x = b"\xb2_!\\\xdf\x1b\xac\xdc\xd0\xfa} \xad\x11\x8e\xeb";
-        assert_eq!(BloomImpl::<BN, HN, SipH<BN>>::check(&hs, &bs, x), false);
+        assert_eq!(bf.check(&hs, &bs, x), false);
     }
 }

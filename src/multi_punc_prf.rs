@@ -12,14 +12,14 @@ use sha2::Sha256;
 /// `$t(\cdot)$` is a fixed polynomial.
 ///
 /// - Generic parameter `K` is for the PRF key.
-/// - Generic parameter `PK` is for the punctured key.
+/// - Generic parameter `Pk` is for the punctured key.
 /// - Generic parameter `Y` is for `$\mathcol{Y}$`.
 /// - `$\mathcol{X}$` is `$[N]$` where `N` is the provided generic parameter.
-pub trait MultiPuncPrf<const N: usize, K, PK, Y> {
+pub trait MultiPuncPrf<const N: usize, K, Pk, Y> {
     /// `MF.Setup`.
     ///
     /// Returns a description (i.e., the structure or representation) of a PRF key.
-    fn setup<R>(rng: &mut R) -> K
+    fn setup<R>(&self, rng: &mut R) -> K
     where
         R: Rng + ?Sized;
     /// `MF.Punc`.
@@ -28,22 +28,22 @@ pub trait MultiPuncPrf<const N: usize, K, PK, Y> {
     /// - `ss` is a set of elements `S` s.t. `$|S| \le t(\lambda)$`.
     ///
     /// Returns a punctured key.
-    fn punc(k: &K, ss: &[usize]) -> PK;
+    fn punc(&self, k: &K, ss: &[usize]) -> Pk;
     /// `MF.Eval`.
     ///
     /// - `ks` is the punctured key.
     /// - `x` is the evaluated point. `$x \in [2^LOGN]$`.
     ///
     /// Returns `Y` if `$x \notin S$` otherwise `None`.
-    fn eval(ks: &PK, x: usize) -> Option<Y>;
+    fn eval(&self, ks: &Pk, x: usize) -> Option<Y>;
     /// `F`.
     ///
     /// It works like `kp = punc(k, [])` then `eval(kp, x)`, which is the default implementation.
     /// Provided for possible optimization.
     /// Or say this is the actual start point.
-    fn f(k: &K, x: usize) -> Option<Y> {
-        let kp = Self::punc(k, &[]);
-        Self::eval(&kp, x)
+    fn f(&self, k: &K, x: usize) -> Option<Y> {
+        let kp = self.punc(k, &[]);
+        self.eval(&kp, x)
     }
 }
 
@@ -52,8 +52,6 @@ pub struct GgmMultiPuncPrf<const LAMBDA: usize, const N: usize, KD>
 where
     KD: GgmKeyDerive<LAMBDA>,
 {
-    // TODO: Instantiation
-    #[allow(dead_code)]
     kd: KD,
 }
 
@@ -81,7 +79,7 @@ impl<const LAMBDA: usize, const N: usize, KD>
 where
     KD: GgmKeyDerive<LAMBDA>,
 {
-    fn setup<R>(rng: &mut R) -> GgmPrfKey<LAMBDA>
+    fn setup<R>(&self, rng: &mut R) -> GgmPrfKey<LAMBDA>
     where
         R: Rng + ?Sized,
     {
@@ -90,7 +88,7 @@ where
         GgmPrfKey { init_key }
     }
 
-    fn punc(k: &GgmPrfKey<LAMBDA>, ss: &[usize]) -> GgmPuncKey<LAMBDA> {
+    fn punc(&self, k: &GgmPrfKey<LAMBDA>, ss: &[usize]) -> GgmPuncKey<LAMBDA> {
         let init_level = (N as f64).log2().ceil() as u32;
         let left_nodes: Vec<_> = (0..N)
             .filter(|i| !ss.contains(i))
@@ -107,7 +105,7 @@ where
                     key: k.init_key,
                     level,
                 };
-                ggm_key_derive_helper::<LAMBDA, KD>(&mut node.key, i, level, 0);
+                ggm_key_derive_helper(&self.kd, &mut node.key, i, level, 0);
                 node
             })
             .collect();
@@ -116,16 +114,11 @@ where
 
     /// `ks.nodes` covers the whole left tree without overlapping.
     /// `x` can find the node covering it by comparing its prefix.
-    fn eval(ks: &GgmPuncKey<LAMBDA>, x: usize) -> Option<[u8; LAMBDA]> {
+    fn eval(&self, ks: &GgmPuncKey<LAMBDA>, x: usize) -> Option<[u8; LAMBDA]> {
         ks.nodes.iter().find_map(|node| {
             if x >> (ks.init_level - node.level) == node.i {
                 let mut derived_key = node.key;
-                ggm_key_derive_helper::<LAMBDA, KD>(
-                    &mut derived_key,
-                    x,
-                    ks.init_level - node.level,
-                    0,
-                );
+                ggm_key_derive_helper(&self.kd, &mut derived_key, x, ks.init_level - node.level, 0);
                 Some(derived_key)
             } else {
                 None
@@ -135,13 +128,13 @@ where
 
     /// No need to compute the minimum coverage.
     /// Just use the binary form of `x` to derive the key.
-    fn f(k: &GgmPrfKey<LAMBDA>, x: usize) -> Option<[u8; LAMBDA]> {
+    fn f(&self, k: &GgmPrfKey<LAMBDA>, x: usize) -> Option<[u8; LAMBDA]> {
         if x >= N {
             return None;
         }
         let init_level = (N as f64).log2().ceil() as u32;
         let mut derived_key = k.init_key;
-        ggm_key_derive_helper::<LAMBDA, KD>(&mut derived_key, x, init_level, 0);
+        ggm_key_derive_helper::<LAMBDA, KD>(&self.kd, &mut derived_key, x, init_level, 0);
         Some(derived_key)
     }
 }
@@ -195,6 +188,7 @@ fn ggm_min_cover(nodes: Vec<GgmNodeForMinCov>) -> Vec<GgmNodeForMinCov> {
 ///
 /// Maybe there is a faster way, but this is from [shangqimonash/Aura](https://github.com/shangqimonash/Aura) .
 fn ggm_key_derive_helper<const LAMBDA: usize, KD>(
+    kd: &KD,
     key: &mut [u8; LAMBDA],
     i: usize,
     level: u32,
@@ -207,18 +201,25 @@ fn ggm_key_derive_helper<const LAMBDA: usize, KD>(
     }
     for k in (dest_level + 1..level + 1).rev() {
         let k_bit = ((i & (1 << (k - 1))) >> (k - 1)) as u8;
-        KD::key_derive(key, &[k_bit]);
+        kd.key_derive(key, &[k_bit]);
     }
 }
 
 pub trait GgmKeyDerive<const LAMBDA: usize> {
-    fn key_derive(key: &mut [u8; LAMBDA], input: &[u8]);
+    fn key_derive(&self, key: &mut [u8; LAMBDA], input: &[u8]);
 }
 
+#[derive(Default)]
 pub struct HmacSha256GgmKeyDerive;
 
+impl HmacSha256GgmKeyDerive {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
 impl GgmKeyDerive<32> for HmacSha256GgmKeyDerive {
-    fn key_derive(key: &mut [u8; 32], input: &[u8]) {
+    fn key_derive(&self, key: &mut [u8; 32], input: &[u8]) {
         let mut mac = Hmac::<Sha256>::new_from_slice(key).unwrap();
         mac.update(input);
         let result = mac.finalize();
@@ -238,11 +239,12 @@ mod tests {
 
     #[test]
     fn test_ggm_punc_then_eval_ok() {
-        let prf_key = GgmMultiPuncPrf::<32, N, HmacSha256GgmKeyDerive>::setup(&mut thread_rng());
-        let punc_key =
-            GgmMultiPuncPrf::<32, N, HmacSha256GgmKeyDerive>::punc(&prf_key, PUNC_POINTS);
+        let kd = HmacSha256GgmKeyDerive::new();
+        let mf = GgmMultiPuncPrf::<32, N, _>::new(kd);
+        let prf_key = mf.setup(&mut thread_rng());
+        let punc_key = mf.punc(&prf_key, PUNC_POINTS);
         for x in 0..N {
-            let y = GgmMultiPuncPrf::<32, N, HmacSha256GgmKeyDerive>::eval(&punc_key, x);
+            let y = mf.eval(&punc_key, x);
             if PUNC_POINTS.contains(&x) {
                 assert!(y.is_none());
             } else {
@@ -253,18 +255,13 @@ mod tests {
 
     #[test]
     fn test_ggm_punc_y_unchanged() {
-        let prf_key = GgmMultiPuncPrf::<32, N, HmacSha256GgmKeyDerive>::setup(&mut thread_rng());
-        let punc_key0 = GgmMultiPuncPrf::<32, N, HmacSha256GgmKeyDerive>::punc(&prf_key, &[]);
-        let ys0: Vec<_> = (0..N)
-            .into_iter()
-            .map(|x| GgmMultiPuncPrf::<32, N, HmacSha256GgmKeyDerive>::eval(&punc_key0, x))
-            .collect();
-        let punc_key1 =
-            GgmMultiPuncPrf::<32, N, HmacSha256GgmKeyDerive>::punc(&prf_key, PUNC_POINTS);
-        let ys1: Vec<_> = (0..N)
-            .into_iter()
-            .map(|x| GgmMultiPuncPrf::<32, N, HmacSha256GgmKeyDerive>::eval(&punc_key1, x))
-            .collect();
+        let kd = HmacSha256GgmKeyDerive::new();
+        let mf = GgmMultiPuncPrf::<32, N, _>::new(kd);
+        let prf_key = mf.setup(&mut thread_rng());
+        let punc_key0 = mf.punc(&prf_key, &[]);
+        let ys0: Vec<_> = (0..N).into_iter().map(|x| mf.eval(&punc_key0, x)).collect();
+        let punc_key1 = mf.punc(&prf_key, PUNC_POINTS);
+        let ys1: Vec<_> = (0..N).into_iter().map(|x| mf.eval(&punc_key1, x)).collect();
         for (y0, y1) in ys0.iter().zip(ys1.iter()) {
             match (y0, y1) {
                 (Some(y0_val), Some(y1_val)) => assert_eq!(y0_val, y1_val),
